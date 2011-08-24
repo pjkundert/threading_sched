@@ -7,7 +7,7 @@ import threading_sched as sched
 timer = timeit.default_timer
 sleep = time.sleep
 
-def test_default_basic():
+def test_scaled_basic():
     sch = sched.scheduler(timer, sleep)
     beg = timer()
     when = []
@@ -18,7 +18,7 @@ def test_default_basic():
     delayed =when[0] - beg;  assert 0.99 < delayed < 1.01
 
 
-def test_default_preemption():
+def test_scaled_preemption():
     sch = sched.scheduler(timer, sleep)
     beg = timer()
     when = []
@@ -30,7 +30,7 @@ def test_default_preemption():
     delay00 = when[0] - beg; assert 0.99 < delay00 < 1.01	# The Timer-scheduled event, now 1s ago
     delay01 = when[1] - beg; assert 1.99 < delay01 < 2.01	# The original event, just expired
 
-def test_default_cancellation():
+def test_scaled_cancellation():
     sch = sched.scheduler(timer, sleep)
     beg = timer()
     when = []
