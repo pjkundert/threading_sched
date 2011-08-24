@@ -30,3 +30,15 @@ def test_preemption():
     delay00 = when[0] - beg; assert 0.99 < delay00 < 1.01	# The Timer-scheduled event, now 1s ago
     delay01 = when[1] - beg; assert 1.99 < delay01 < 2.01	# The original event, just expired
 
+def test_cancellation():
+    sch = sched.scheduler(timer, sleep)
+    beg = timer()
+    when = []
+    e = sch.enterabs( beg + 2.0, 0, lambda: when.append(timer()), () )
+    threading.Timer( 0.5, lambda: sch.cancel(e)).start()
+    sch.run()
+    now = timer()
+    elapsed = now - beg;     assert 0.48 < elapsed < 0.52	# Total run should take ~1/2 second
+    assert len(when) == 0					# And no events should fire
+
+

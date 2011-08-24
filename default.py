@@ -4,9 +4,11 @@ import sched
 
 class scheduler(sched.scheduler):
     """
-    Thread-safe implementation of the stock Python sched.scheduler.  The API remains basically the
-    same.  We awaken our run method whenever the events in the list might have changed in a way that
-    could shorten our timeout.
+    Thread-safe implementation of the stock Python sched.scheduler class.  The API remains basically
+    the same, with some optional additions to support creating custom prioritization schemes.
+
+    We implement locking for thread safety, and we awaken our run method whenever the events in the
+    list might have changed in a way that could shorten our timeout.
     """
     def __init__(self, *args, **kwargs):
         self.lock = threading.RLock()
@@ -21,17 +23,21 @@ class scheduler(sched.scheduler):
         """
         with self.cond:
             e = sched.scheduler.enterabs(self, *args, **kwargs)
-            # Awaken any thread awaiting on a condition change, eg run()
+            # Awaken any thread awaiting on a condition change, eg .run(), or .wait()
             self.cond.notify_all()
         print "Scheduling %s" % ( str(e) )
         return e
 
     def cancel(self, *args, **kwargs):
         """
-        Removing an event can only result in us awakening too early, which is not a problem.
+        Removing an event can only result in us awakening too early, which is generally not a
+        problem.  However, if this empies the queue completely, we want run() to wake up and return
+        right away!
         """
-        with self.lock:
-            return sched.scheduler.cancel(self, *args, **kwargs)
+        with self.cond:
+            e = sched.scheduler.cancel(self, *args, **kwargs)
+            self.cond.notify_all()
+        return e
 
     def empty(self):
         with self.lock:
@@ -56,7 +62,7 @@ class scheduler(sched.scheduler):
 
     def run(self):
         """
-        Retrieve and event, waiting and looping if it hasn't expired.  Otherwise, remove it from the
+        Retrieve an event, waiting and looping if it hasn't expired.  Otherwise, remove it from the
         schedule, and run it.  Unlike the underlying sched.scheduler, this implementation waits in a
         multithreading sensitive fashion; if a new event is scheduled, we'll awaken and re-schedule
         our next wake-up.
@@ -64,8 +70,11 @@ class scheduler(sched.scheduler):
         Returns when there are no more events left to run.
 
         
-        To safely process events, a Thread must know (somehow) that the overall program is not yet
-        complete, and implement its own run method like this:
+        This run method is not usually appropriate to use directly as a Thread.run method, because
+        it returns when the schedule is empty; this often doesn't mean the program is done.  To
+        safely process events, a Thread must know (somehow) that the overall program is not yet
+        complete, and implement its own run method like this, waiting for more events to be
+        scheduled each time scheduler.run returns:
 
         class scheduler_thread(scheduler):
             def __init__(self):
