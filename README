@@ -1,0 +1,20 @@
+Thread-safe Python schedulers
+
+OVERVIEW
+
+    The sched.scheduler implementation supplied with Python omits some capabilities that
+are desirable:
+
+
+Thread safety
+
+    Scheduling new events and/or removing existing events from other threads isn't always correct.
+For example, the run method will not awaken and re-schedule itself, if an event is added before the
+previous earliest event's expiry.
+
+Ordering
+
+    The ordering is strictly by timeout, then priority.  Often, other ordering schemes are
+desirable.  For example, ordering by timeout, but then scaling event age by priority to avoid
+starvation of lower-priority events.
+
