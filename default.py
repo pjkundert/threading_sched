@@ -19,12 +19,12 @@ class scheduler(sched.scheduler):
         the Condition, and issue the nofify_all; it won't be delivered 'til we fully release our
         self.lock.
         """
-        with self.lock:
+        with self.cond:
             e = sched.scheduler.enterabs(self, *args, **kwargs)
-            with self.cond:
-                # Awaken any thread awaiting on a condition change, eg run()
-                self.cond.notify_all()
-            return e
+            # Awaken any thread awaiting on a condition change, eg run()
+            self.cond.notify_all()
+        print "Scheduling %s" % ( str(e) )
+        return e
 
     def cancel(self, *args, **kwargs):
         """
@@ -56,9 +56,9 @@ class scheduler(sched.scheduler):
 
     def run(self):
         """
-        Review all expired events, sort by priority-scaled age, and remove the next one to be run
-        from the schedule, and run it.  Unlike the underlying sched.scheduler, waits in a
-        multithreading-sensitive fashion; if a new event is scheduled, we'll awaken and re-schedule
+        Retrieve and event, waiting and looping if it hasn't expired.  Otherwise, remove it from the
+        schedule, and run it.  Unlike the underlying sched.scheduler, this implementation waits in a
+        multithreading sensitive fashion; if a new event is scheduled, we'll awaken and re-schedule
         our next wake-up.
 
         Returns when there are no more events left to run.
@@ -88,6 +88,7 @@ class scheduler(sched.scheduler):
                 if now < time:
                     # Next event hasn't expired; Wait 'til expiry, or an self.cond.notify...()
                     self.cond.wait(time - now)		# Releases self.lock
+                    print "Schedule condition wait expired after %fs" % (self.timefunc() - now)
                     continue
                     # TODO: this is inefficient pre-3.2, due to a busy wait loop in the
                     # threading Condition.  Perhaps we should detect this, and implement in
@@ -102,5 +103,7 @@ class scheduler(sched.scheduler):
 
             # Trigger the expired (and removed) event's function.  This may result in schedule
             # modification, so we do this outside the lock.
+            print "Scheduled event firing: %s" % (str(event))
             func(*args)
+            self.delayfunc(0)				# Let other threads run
 
