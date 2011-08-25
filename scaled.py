@@ -37,13 +37,15 @@ class scaled_scheduler(scheduler):
     '''
     def next_event(self, now=None):
         with self.lock:
+            if now is None:
+                now = self.timefunc()
             try:
                 return max(				# Return the maximal event
                     itertools.takewhile(
                         lambda e: e.time <= now,	#   taking only expired events
                         self._queue),			#   from this queue
                     key=lambda e: (e.priority		#   maximizing this calculation
-                                   * (e.time - now)))
+                                   * (now - e.time)))
             except ValueError:
                 # No expired events.  Just return the earliest
                 return self._queue[0]
