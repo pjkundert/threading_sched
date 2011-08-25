@@ -20,5 +20,6 @@ scaled_scheduler(timefunc, delayfunc):
 # Exposerom threaded_sched import
 __all__ = ["default", "scaled"]
 
+from sched import Event
 from default import scheduler
 from scaled import scaled_scheduler

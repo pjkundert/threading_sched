@@ -109,7 +109,7 @@ class scheduler(sched.scheduler):
                     self.sch.wait()
 
         """
-        while True:
+        while True if pred is None else pred():
             # Get the next event, relative to the current time. When schedule is empty, we're done.
             now = self.timefunc()
             with self.cond:				# Acquires self.lock
