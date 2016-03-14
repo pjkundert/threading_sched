@@ -1,6 +1,13 @@
+from __future__ import absolute_import
+from __future__ import print_function
+
+__author__                      = "Perry Kundert"
+__email__                       = "perry@hardconsulting.com"
+__copyright__                   = "Copyright (c) 2011 Hard Consulting Corporation"
+__license__                     = "GPLv3 (or later)"
 
 import itertools
-from default import scheduler
+from .default import scheduler
 class scaled_scheduler(scheduler):
     '''
     Extend our (thread-safe) implementation of the Python sched.scheduler, to order events by age

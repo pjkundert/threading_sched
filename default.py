@@ -1,3 +1,10 @@
+from __future__ import absolute_import
+from __future__ import print_function
+
+__author__                      = "Perry Kundert"
+__email__                       = "perry@hardconsulting.com"
+__copyright__                   = "Copyright (c) 2011 Hard Consulting Corporation"
+__license__                     = "GPLv3 (or later)"
 
 import threading
 import sched
@@ -24,12 +31,14 @@ class scheduler(sched.scheduler):
         self.cond = threading.Condition(self.lock)
         sched.scheduler.__init__(self, *args, **kwargs)
 
-    def enterabs(self, time, priority, action, argument, kwargs={}):
+    def enterabs(self, time, priority, action, argument, kwargs=None):
         """
         Assumes enter() uses enterabs().  Since our Condition uses our RLock, we can safely acquire
         the Condition, and issue the nofify_all; it won't be delivered 'til we fully release our
         self.lock.
         """
+        if kwargs is None:
+            kwargs = {}
         with self.cond:
             # Prepare a closure to wrap the action, trapping the supplied keyword args (if any).  If
             # *any* keyword arguments are supplied, then they will be passed to the action along
@@ -47,7 +56,7 @@ class scheduler(sched.scheduler):
         #print "Scheduling %s" % ( str(e) )
         return e
 
-    def enter(self, delay, priority, action, argument, kwargs={}):
+    def enter(self, delay, priority, action, argument, kwargs=None):
         return self.enterabs(self.timefunc() + delay, priority, action, argument, kwargs=kwargs)
 
     def cancel(self, *args, **kwargs):
@@ -117,10 +126,10 @@ class scheduler(sched.scheduler):
                     break
 
                 # Queue is not empty, guaranteed
-                time, prio, func, args = event = self.next_event(now=now)
-                if now < time:
+                event = self.next_event(now=now)
+                if now < event.time:
                     # Next event hasn't expired; Wait 'til expiry, or an self.cond.notify...()
-                    self.cond.wait(time - now)		# Releases self.lock
+                    self.cond.wait(event[0] - now)	# Releases self.lock
                     #print "Schedule condition wait expired after %fs" % (self.timefunc() - now)
                     continue
                     # TODO: this is inefficient pre-3.2, due to a busy wait loop in the
@@ -138,6 +147,6 @@ class scheduler(sched.scheduler):
             # schedule modification, so we do this outside the lock.  If func raises an exception,
             # the scheduler's invariant is maintained, and this method may be called again.
             #print "Scheduled event firing: %s" % (str(event))
-            func(event)
+            event.action(event)
             self.delayfunc(0)				# Let other threads run
 
