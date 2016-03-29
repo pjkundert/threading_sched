@@ -1,3 +1,6 @@
 *~
 *.pyc
 README.tex
+build/
+dist/
+*.egg-info/

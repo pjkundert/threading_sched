@@ -27,32 +27,30 @@ class scheduler(sched.scheduler):
     
     """
     def __init__(self, *args, **kwargs):
-        self.lock = threading.RLock()
-        self.cond = threading.Condition(self.lock)
         sched.scheduler.__init__(self, *args, **kwargs)
+        if not hasattr( self, '_lock' ):
+            self._lock = threading.RLock() # < Python 3.3
+        self._cond = threading.Condition( self._lock )
 
     def enterabs(self, time, priority, action, argument, kwargs=None):
-        """
-        Assumes enter() uses enterabs().  Since our Condition uses our RLock, we can safely acquire
-        the Condition, and issue the nofify_all; it won't be delivered 'til we fully release our
-        self.lock.
+        """Assumes enter() uses enterabs().  Since our Condition uses our RLock, we can safely acquire the
+        Condition, and issue the notify_all; it won't be delivered 'til we fully release our
+        self._lock.  Since base sched.scheduler is an old-style class in Python 2, don't use super.
+
         """
         if kwargs is None:
             kwargs = {}
-        with self.cond:
-            # Prepare a closure to wrap the action, trapping the supplied keyword args (if any).  If
-            # *any* keyword arguments are supplied, then they will be passed to the action along
-            # with the event arguments; they will also always be updated to contain an 'event'
-            # keyword argument, containing the event.  If just 'event' and no other keywords are
-            # desired, just pass an empty 'event' keyword entry.  We must *always* use the wrapper,
-            # because we *always* supply the event when the action is invoked.
-            def wrapper(event):
-                if kwargs:
-                    kwargs.update({'event': event})
-                return action(*event.argument, **kwargs)
-            e = sched.scheduler.enterabs(self, time, priority, wrapper, argument)
+        with self._cond:
+            if hasattr( sched.Event, 'kwargs' ): # iff >= Python3
+                e = sched.scheduler.enterabs( self, time, priority, action, argument, kwargs )
+            else:
+                # Prepare a closure to wrap the action, trapping the supplied keyword kwargs (if
+                # any).  If *any* keyword arguments are supplied, then they will be passed to the
+                # action along with the event arguments.
+                e = sched.scheduler.enterabs(
+                    self, time, priority, lambda *args: action( *args, **kwargs ), argument )
             # Awaken any thread awaiting on a condition change, eg .run(), or .wait()
-            self.cond.notify_all()
+            self._cond.notify_all()
         #print "Scheduling %s" % ( str(e) )
         return e
 
@@ -60,18 +58,18 @@ class scheduler(sched.scheduler):
         return self.enterabs(self.timefunc() + delay, priority, action, argument, kwargs=kwargs)
 
     def cancel(self, *args, **kwargs):
+        """Removing an event can only result in us awakening too early, which is generally not a problem.
+        However, if this empties the queue completely, we want run() to wake up and return right
+        away!
+
         """
-        Removing an event can only result in us awakening too early, which is generally not a
-        problem.  However, if this empies the queue completely, we want run() to wake up and return
-        right away!
-        """
-        with self.cond:
+        with self._cond:
             e = sched.scheduler.cancel(self, *args, **kwargs)
-            self.cond.notify_all()
+            self._cond.notify_all()
         return e
 
     def empty(self):
-        with self.lock:
+        with self._lock:
             return sched.scheduler.empty(self)
 
     def wait(self):
@@ -79,16 +77,16 @@ class scheduler(sched.scheduler):
         Awaits a change in condition that could mean that there are now events to process.  Use this
         when the queue is (or might be) empty, and a thread needs to wait for something to process.
         """
-        with self.cond:
+        with self._cond:
             if self.empty():
-                self.cond.wait()
+                self._cond.wait()
 
     def next_event(self, now=None):
         """
         Return the next scheduled event, without removing it from the queue.  Throws an exception if
         none available.  Override this method to implement other priority schemes.
         """
-        with self.lock:
+        with self._lock:
             return self._queue[0]			# Strictly by time, then priority
 
     def run(self, pred=None):
@@ -121,15 +119,15 @@ class scheduler(sched.scheduler):
         while True if pred is None else pred():
             # Get the next event, relative to the current time. When schedule is empty, we're done.
             now = self.timefunc()
-            with self.cond:				# Acquires self.lock
+            with self._cond:				# Acquires self._lock
                 if self.empty():
                     break
 
                 # Queue is not empty, guaranteed
                 event = self.next_event(now=now)
                 if now < event.time:
-                    # Next event hasn't expired; Wait 'til expiry, or an self.cond.notify...()
-                    self.cond.wait(event[0] - now)	# Releases self.lock
+                    # Next event hasn't expired; Wait 'til expiry, or an self._cond.notify...()
+                    self._cond.wait(event.time - now)	# Releases self._lock
                     #print "Schedule condition wait expired after %fs" % (self.timefunc() - now)
                     continue
                     # TODO: this is inefficient pre-3.2, due to a busy wait loop in the
@@ -138,7 +136,7 @@ class scheduler(sched.scheduler):
                     # trigger .notify_all()?
 
                 # An expired event is detected.  No schedule modification can have occurred (we hold
-                # the lock, and no self.cond.wait() has been processed, because it always will
+                # the lock, and no self._cond.wait() has been processed, because it always will
                 # 'continue' the loop) so we can safely cancel it.  We can make no assumptions about
                 # its position in the _queue, to allow arbitrary scheduling algorithms.
                 self.cancel(event)
@@ -147,6 +145,9 @@ class scheduler(sched.scheduler):
             # schedule modification, so we do this outside the lock.  If func raises an exception,
             # the scheduler's invariant is maintained, and this method may be called again.
             #print "Scheduled event firing: %s" % (str(event))
-            event.action(event)
+            if hasattr( event, 'kwargs' ): # iff >= Python3
+                event.action( *event.argument, **event.kwargs )
+            else:
+                event.action( *event.argument )
             self.delayfunc(0)				# Let other threads run
 

@@ -1,5 +1,6 @@
 from __future__ import absolute_import
 from __future__ import print_function
+from __future__ import division
 
 __author__                      = "Perry Kundert"
 __email__                       = "perry@hardconsulting.com"
@@ -49,18 +50,18 @@ def test_scaled_cancellation():
     elapsed = now - beg;     assert 0.40 < elapsed < 0.60	# Total run should take ~1/2 second
     assert len(when) == 0					# And no events should fire
 
-def reschedule(log, end, sch, name, priority, delay, latency, event=None):
+def reschedule(log, end, sch, name, priority, delay, latency, event_time=None):
     """
     A function which appends a record of itself to the supplied log list, and immediately schedules
     a request to run itself after a certain delay period, with a certain scheduling priority (if the
     end time hasn't been reached).  The function then sleeps for the specified latency period.
     """
     now = timer()
-    log.append( (now, name, priority, delay, latency, now - event.time) )
+    log.append( (now, name, priority, delay, latency, now - event_time) )
     if now <= end:
-        sch.enter(delay, priority,
-                  reschedule, (log, end, sch, name, priority, delay, latency),
-                  kwargs={'event':None})
+        sch.enterabs(now + delay, priority,
+                     reschedule, (log, end, sch, name, priority, delay, latency),
+                     kwargs={'event_time':now + delay})
     sleep(latency)
 
 
@@ -88,7 +89,7 @@ def test_scaled_multiple():
     for name, prio in mix:
         sch.enterabs(beg, prio,
                      reschedule, (log, beg + dur, sch, name, prio, 0.0, lat),
-                     kwargs={'event':None})
+                     kwargs={'event_time':beg})
     siz = len(sch.queue)
     
     sch.run()
@@ -114,8 +115,8 @@ def test_scaled_multiple():
         try:    ovr[name] += overdue
         except: ovr[name]  = overdue
     for name, prio in mix:
-        strength = float(prio) / prio_sum
-        incidence = float(rel[name]) / len(log)
+        strength = prio / prio_sum
+        incidence = rel[name] / len(log)
         error = (incidence - strength) / strength
         overdue = ovr[name]/rel[name]  # Average overdue in seconds
         print( "%3d x %-10s prio == %7f; %4.2fs overdue; strengh == % 5.1f%% vs. % 5.1f%% incidence (% 5.1f%% err.)" % (

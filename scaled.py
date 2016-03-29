@@ -27,7 +27,7 @@ class scaled_scheduler(scheduler):
         def expired(event, now):
             return event.time >= now
 
-        with self.lock:
+        with self._lock:
             if now is None:
                 now = self.timefunc()
             queue = iter(self._queue)
@@ -43,7 +43,7 @@ class scaled_scheduler(scheduler):
         return best
     '''
     def next_event(self, now=None):
-        with self.lock:
+        with self._lock:
             if now is None:
                 now = self.timefunc()
             try:
